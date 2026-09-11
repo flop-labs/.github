@@ -1,0 +1,26 @@
+name: Task
+description: A unit of work — a change to make, not a defect to report.
+labels: ["task"]
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: Task
+      description: What should be true when this is done. One outcome, stated plainly.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this matters now, and anything a newcomer would otherwise have to rediscover — file paths, prior decisions, constraints.
+    validations:
+      required: false
+  - type: textarea
+    id: verify
+    attributes:
+      label: Verify
+      description: The command or observation that proves it is done.
+      render: shell
+    validations:
+      required: false
