@@ -1,0 +1,38 @@
+name: Bug report
+description: Something behaves differently from what it documents or promises.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Anything exploitable goes to a [private security advisory](https://github.com/flop-labs/.github/blob/main/SECURITY.md), not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+      placeholder: Ran `…`, expected …, got …
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: The smallest thing we can run to see it. A command, a failing test, a request.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release tag, commit SHA, or image digest you tested.
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, runtime version, hardware — whatever is relevant. Skip if it plainly isn't.
+    validations:
+      required: false
