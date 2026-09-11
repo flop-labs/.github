@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/flop-labs/.github/blob/main/SECURITY.md
+    about: Do not open a public issue. Use a private security advisory or security@flop.finance.
+  - name: FLOP Labs on GitHub
+    url: https://github.com/flop-labs
+    about: Other FLOP Labs projects, and which repository a question belongs in.
