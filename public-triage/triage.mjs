@@ -89,15 +89,47 @@ export async function judge(state, question, key, fetcher = fetch) {
 
 const classify = {
   type: 'choice',
-  instructions: policy + 'Which single label describes the principal purpose of this issue or PR?',
+  instructions:
+    policy +
+    [
+      'Choose the single label that describes the principal purpose of the item.',
+      'For a pull request, classify what the changed files and description show it actually changes. A defect discussed as motivation is not itself a fix. A PR adding only regression tests for existing behavior is other.',
+      'For an issue that identifies contradictory public documentation and asks for clarification or correction, choose documentation, even if the author phrases the request as a question. Use question for information requests without a reported documentation defect.',
+    ].join(' '),
   criteria: {
     bug: 'A concrete software defect or fix.',
     enhancement: 'A requested or implemented feature.',
-    documentation: 'A change to documentation.',
+    documentation:
+      'A requested or implemented documentation correction, including conflicting instructions or specifications.',
     question: 'A request for information.',
     other: 'Unclear, mixed, or none of these.',
   },
 }
+const checkReportedDefect = {
+  ...classify,
+  instructions:
+    classify.instructions +
+    ' Classify an issue by the problem it demonstrates, before considering proposed remedies. If actual software behavior violates a documented contract, choose bug. A reproduction showing expected and actual behavior is evidence of a defect even when the author offers documenting the limitation as an alternative fix. Choose documentation for conflicting written sources or inaccurate descriptions of intended behavior, even if the reporter ran a test to show what the guidance should say.',
+}
+// Use the PR file count to reject incomplete lists. Send filenames only, never diff hunks.
+function prLabelContext(path, item, request) {
+  const pull = request(path)
+  if (!Number.isInteger(pull.changed_files) || pull.changed_files < 1 || pull.changed_files > 100) return
+  const files = request(path + '/files?per_page=100')
+  if (
+    files.length !== pull.changed_files ||
+    files.some((f) => typeof f.filename !== 'string' || !f.filename)
+  )
+    return
+  const state = {
+    ...textOf(item),
+    itemType: 'pull_request',
+    changedFilePaths: files.map((f) => f.filename),
+  }
+  if (Buffer.byteLength(JSON.stringify(state)) > 32000) return
+  return { state, head: pull.head.sha, base: pull.base.sha }
+}
+
 const equivalent = {
   type: 'noul',
   instructions:
@@ -252,14 +284,42 @@ export async function sweep({
     let kind = knownKind(item)
     if (!kind && !names(item).some((l) => l.startsWith('type:'))) {
       kind = prefixedKind(item)
-      if (!kind && key && !protectedItem(item) && substantive(item).length <= 12_000)
-        kind = await decide(textOf(item), classify, key)
+      let prContext
+      const pullPath = base + '/pulls/' + item.number
+      // For PRs and question-prefixed issues, the actual change or reported conflict
+      // can outweigh the title convention. Preserve title routing in keyless mode.
+      if (
+        (!kind || pr(item) || kind === 'question') &&
+        key &&
+        !protectedItem(item) &&
+        substantive(item).length <= 12_000
+      ) {
+        if (pr(item)) {
+          prContext = prLabelContext(pullPath, item, request)
+          if (!prContext) continue
+        }
+        const state = prContext?.state ?? { ...textOf(item), itemType: 'issue' }
+        kind = await decide(state, classify, key)
+        if (!prContext && kind === 'other' && available('bug', labels)) {
+          const reviewed = await decide(state, checkReportedDefect, key)
+          if (reviewed === 'bug') kind = 'bug'
+        }
+      }
       const label = available(kind, labels)
       if (
         label &&
         !events().some((e) => e.event === 'unlabeled' && e.label.name === label) &&
         current(item)
       ) {
+        if (prContext) {
+          const live = request(pullPath)
+          if (
+            live.state !== 'open' ||
+            live.head.sha !== prContext.head ||
+            live.base.sha !== prContext.base
+          )
+            continue
+        }
         if (apply) request(path + '/labels', { method: 'POST', body: { labels: [label] } })
         log('#' + item.number + ' add ' + label)
         added++

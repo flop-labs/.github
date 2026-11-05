@@ -29,6 +29,13 @@ function fixture(
     doc = '## Links\n[Devnet explorer](https://explorer.devnet.flop.network)',
     beforeLive,
     afterComment,
+    pullFiles = ['src/parser.js'],
+    pullInfo = () => ({
+      state: 'open',
+      head: { sha: 'head' },
+      base: { sha: 'base' },
+      changed_files: pullFiles.length,
+    }),
   } = {},
 ) {
   const stored = structuredClone(items)
@@ -51,6 +58,9 @@ function fixture(
         encoding: 'base64',
         content: Buffer.from(doc).toString('base64'),
       }
+    if (/^\/pulls\/\d+\/files\?per_page=100$/.test(rel))
+      return pullFiles.map((filename) => ({ filename, patch: 'diff contents' }))
+    if (/^\/pulls\/\d+$/.test(rel)) return pullInfo()
     if (rel === 'graphql') {
       assert.equal(data.variables.original.startsWith('I_'), true)
       const victim = stored.find((r) => r.node_id === data.variables.issue)
@@ -111,7 +121,10 @@ test('use only available labels, preserve existing decisions, classify PRs, resp
       timeline: { 5: [{ event: 'unlabeled', label: { name: 'type:bug' } }] },
     },
   )
-  await f.run({ key: 'fixture', decide: async () => 'question' })
+  await f.run({
+    key: 'fixture',
+    decide: async (state) => (state.itemType === 'pull_request' ? 'bug' : 'question'),
+  })
   assert.deepEqual(
     f.writes.map((w) => [w.path, w.data.labels]),
     [
@@ -327,4 +340,81 @@ test('a conventional bug title can label a security disclaimer without sending i
     f.writes.map((w) => w.path),
     ['/issues/1/labels'],
   )
+})
+
+test('Jev sees the actual PR paths and can abstain despite a fix prefix; a question can request a docs correction', async () => {
+  const samples = [
+    bug(1, { title: 'fix: reject a wrong key', labels: [], pull_request: {} }),
+    bug(2, { title: 'question: why do the FAQ and spec disagree?', labels: [] }),
+  ]
+  const f = fixture(samples, {
+    pullFiles: ['tests/unit/test_key.py', 'tests/fixtures/key.json'],
+    repoLabels: ['bug', 'question', 'documentation'],
+  })
+  const seen = []
+  await f.run({
+    key: 'fixture',
+    decide: async (state, q) => {
+      seen.push(state)
+      assert.match(q.instructions, /only regression tests/)
+      assert.match(q.instructions, /contradictory public documentation/)
+      assert.doesNotMatch(q.instructions, /proposed remedies/)
+      return state.itemType === 'pull_request' ? 'other' : 'documentation'
+    },
+  })
+  assert.deepEqual(seen, [
+    {
+      title: samples[0].title,
+      body,
+      itemType: 'pull_request',
+      changedFilePaths: ['tests/unit/test_key.py', 'tests/fixtures/key.json'],
+    },
+    { title: samples[1].title, body, itemType: 'issue' },
+  ])
+  assert.deepEqual(
+    f.writes.map((w) => [w.path, w.data.labels]),
+    [['/issues/2/labels', ['documentation']]],
+  )
+})
+
+test('only an unclassified issue can gain a bug label from a contract review', async () => {
+  const run = async (reviewed) => {
+    const issue = bug(1, { labels: [] })
+    const f = fixture([issue], { repoLabels: ['bug', 'documentation'] })
+    const prompts = []
+    await f.run({
+      key: 'fixture',
+      decide: async (state, q) => {
+        assert.deepEqual(state, { title: issue.title, body: issue.body, itemType: 'issue' })
+        prompts.push(q.instructions)
+        return prompts.length === 1 ? 'other' : reviewed
+      },
+    })
+    assert.equal(prompts.length, 2)
+    assert.match(prompts[1], /actual software behavior violates a documented contract/)
+    return f.writes.map((w) => w.data.labels)
+  }
+  assert.deepEqual(await run('bug'), [['bug']])
+  assert.deepEqual(await run('documentation'), [])
+  assert.deepEqual(await run('other'), [])
+})
+
+test('abstain on incomplete PR file lists or a changed revision', async () => {
+  const sample = bug(1, { title: 'fix: parser', labels: [], pull_request: {} })
+  for (const count of [0, 2, 101]) {
+    const f = fixture([sample], { pullInfo: () => ({ changed_files: count }) })
+    await f.run({ key: 'fixture', decide: () => assert.fail('incomplete context reached Jev') })
+    assert.deepEqual(f.writes, [])
+  }
+  let revision = 0
+  const changed = fixture([sample], {
+    pullInfo: () => ({
+      state: 'open',
+      changed_files: 1,
+      head: { sha: String(++revision) },
+      base: { sha: 'base' },
+    }),
+  })
+  await changed.run({ key: 'fixture', decide: async () => 'bug' })
+  assert.deepEqual(changed.writes, [])
 })
