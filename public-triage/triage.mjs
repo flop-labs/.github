@@ -105,7 +105,7 @@ const classify = {
     other: 'Unclear, mixed, or none of these.',
   },
 }
-const classifyIssue = {
+const checkReportedDefect = {
   ...classify,
   instructions:
     classify.instructions +
@@ -298,9 +298,12 @@ export async function sweep({
           prContext = prLabelContext(pullPath, item, request)
           if (!prContext) continue
         }
-        kind = prContext
-          ? await decide(prContext.state, classify, key)
-          : await decide({ ...textOf(item), itemType: 'issue' }, classifyIssue, key)
+        const state = prContext?.state ?? { ...textOf(item), itemType: 'issue' }
+        kind = await decide(state, classify, key)
+        if (!prContext && kind === 'other' && available('bug', labels)) {
+          const reviewed = await decide(state, checkReportedDefect, key)
+          if (reviewed === 'bug') kind = 'bug'
+        }
       }
       const label = available(kind, labels)
       if (

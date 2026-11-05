@@ -358,12 +358,7 @@ test('Jev sees the actual PR paths and can abstain despite a fix prefix; a quest
       seen.push(state)
       assert.match(q.instructions, /only regression tests/)
       assert.match(q.instructions, /contradictory public documentation/)
-      if (state.itemType === 'issue') {
-        assert.match(q.instructions, /actual software behavior violates a documented contract/)
-        assert.match(q.instructions, /inaccurate descriptions of intended behavior/)
-      } else {
-        assert.doesNotMatch(q.instructions, /proposed remedies/)
-      }
+      assert.doesNotMatch(q.instructions, /proposed remedies/)
       return state.itemType === 'pull_request' ? 'other' : 'documentation'
     },
   })
@@ -380,6 +375,28 @@ test('Jev sees the actual PR paths and can abstain despite a fix prefix; a quest
     f.writes.map((w) => [w.path, w.data.labels]),
     [['/issues/2/labels', ['documentation']]],
   )
+})
+
+test('only an unclassified issue can gain a bug label from a contract review', async () => {
+  const run = async (reviewed) => {
+    const issue = bug(1, { labels: [] })
+    const f = fixture([issue], { repoLabels: ['bug', 'documentation'] })
+    const prompts = []
+    await f.run({
+      key: 'fixture',
+      decide: async (state, q) => {
+        assert.deepEqual(state, { title: issue.title, body: issue.body, itemType: 'issue' })
+        prompts.push(q.instructions)
+        return prompts.length === 1 ? 'other' : reviewed
+      },
+    })
+    assert.equal(prompts.length, 2)
+    assert.match(prompts[1], /actual software behavior violates a documented contract/)
+    return f.writes.map((w) => w.data.labels)
+  }
+  assert.deepEqual(await run('bug'), [['bug']])
+  assert.deepEqual(await run('documentation'), [])
+  assert.deepEqual(await run('other'), [])
 })
 
 test('abstain on incomplete PR file lists or a changed revision', async () => {
