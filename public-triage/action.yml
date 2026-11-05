@@ -1,0 +1,19 @@
+name: FLOP public issue and PR triage
+description: Label open issues and pull requests and resolve duplicate or documented issues.
+inputs:
+  apply:
+    description: Apply the plan. The default only reads GitHub.
+    default: 'false'
+  jev-key:
+    description: Optional TypeSafe API key for typed classification and semantic duplicate checks.
+    required: false
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TRIAGE_DIR: ${{ github.action_path }}
+        TRIAGE_APPLY: ${{ inputs.apply }}
+        TYPESAFE_API_KEY: ${{ inputs.jev-key }}
+      run: node "$TRIAGE_DIR/triage.mjs"
