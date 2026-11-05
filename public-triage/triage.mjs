@@ -105,6 +105,12 @@ const classify = {
     other: 'Unclear, mixed, or none of these.',
   },
 }
+const classifyIssue = {
+  ...classify,
+  instructions:
+    classify.instructions +
+    ' Classify an issue by the problem it demonstrates, before considering proposed remedies. If actual software behavior violates a documented contract, choose bug. A reproduction showing expected and actual behavior is evidence of a defect even when the author offers documenting the limitation as an alternative fix. Choose documentation when the conflict is between written sources themselves.',
+}
 // Use the PR file count to reject incomplete lists. Send filenames only, never diff hunks.
 function prLabelContext(path, item, request) {
   const pull = request(path)
@@ -292,7 +298,9 @@ export async function sweep({
           prContext = prLabelContext(pullPath, item, request)
           if (!prContext) continue
         }
-        kind = await decide(prContext?.state ?? { ...textOf(item), itemType: 'issue' }, classify, key)
+        kind = prContext
+          ? await decide(prContext.state, classify, key)
+          : await decide({ ...textOf(item), itemType: 'issue' }, classifyIssue, key)
       }
       const label = available(kind, labels)
       if (
