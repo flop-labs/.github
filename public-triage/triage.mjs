@@ -109,7 +109,7 @@ const classifyIssue = {
   ...classify,
   instructions:
     classify.instructions +
-    ' Classify an issue by the problem it demonstrates, before considering proposed remedies. If actual software behavior violates a documented contract, choose bug. A reproduction showing expected and actual behavior is evidence of a defect even when the author offers documenting the limitation as an alternative fix. Choose documentation when the conflict is between written sources themselves.',
+    ' Classify an issue by the problem it demonstrates, before considering proposed remedies. If actual software behavior violates a documented contract, choose bug. A reproduction showing expected and actual behavior is evidence of a defect even when the author offers documenting the limitation as an alternative fix. Choose documentation for conflicting written sources or inaccurate descriptions of intended behavior, even if the reporter ran a test to show what the guidance should say.',
 }
 // Use the PR file count to reject incomplete lists. Send filenames only, never diff hunks.
 function prLabelContext(path, item, request) {

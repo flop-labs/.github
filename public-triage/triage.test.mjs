@@ -358,8 +358,12 @@ test('Jev sees the actual PR paths and can abstain despite a fix prefix; a quest
       seen.push(state)
       assert.match(q.instructions, /only regression tests/)
       assert.match(q.instructions, /contradictory public documentation/)
-      if (state.itemType === 'issue') assert.match(q.instructions, /actual software behavior violates a documented contract/)
-      else assert.doesNotMatch(q.instructions, /proposed remedies/)
+      if (state.itemType === 'issue') {
+        assert.match(q.instructions, /actual software behavior violates a documented contract/)
+        assert.match(q.instructions, /inaccurate descriptions of intended behavior/)
+      } else {
+        assert.doesNotMatch(q.instructions, /proposed remedies/)
+      }
       return state.itemType === 'pull_request' ? 'other' : 'documentation'
     },
   })
